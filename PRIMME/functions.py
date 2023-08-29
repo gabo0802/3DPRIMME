@@ -3246,6 +3246,7 @@ def compute_energy_labels_gen(im_seq, batch_sz, act_dim=9, energy_dim=3, pad_mod
         current_energy = current_energy_split[i]
         windows_curr_act = next(windows_curr_act_gen).reshape(-1, num_fut, act_dim**d).unsqueeze(3)
         windows_next_obs = next(windows_next_obs_gen).reshape(-1, num_fut, energy_dim**d).unsqueeze(2)#.repeat(1,1,windows_curr_act.shape[-1],1)
+        
         tmp = windows_next_obs != windows_curr_act 
         action_energy = tmp.sum(-1) - tmp[..., int(energy_dim**d/2)].int() 
         energy_change = (current_energy[..., None]-action_energy)/(energy_dim**d-1)
