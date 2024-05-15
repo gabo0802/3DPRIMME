@@ -69,6 +69,28 @@ def check_exist_h5(hps, gps, dts, if_bool=False):
                     else: raise Exception('Dataset does not exist: %s/%s/%s'%(hps[i], gps[i], d))
                     
     if if_bool: return True
+    
+def check_exist_h5_spparks(hps, gps, dts, if_bool=False):
+    #Raises an exception if something doesn't exist
+    
+    # should only have one sim so we needed to adjust the function to account for no 'inner' dictionaries
+    for hp in hps:
+        if not os.path.exists(hp):
+            if if_bool: return False
+            else: raise Exception('File does not exist: %s'%hp)
+    
+    for hp in hps:
+        with h5py.File(hp, 'r') as f:
+            for g in gps:
+                if not g in f.keys():
+                    if if_bool: return False
+                    else: raise Exception('Group does not exist: %s/%s'%(f, g))
+            for d in dts:
+                if not (d in gps and d in f.keys()):
+                    if if_bool: return False
+                    else: raise Exception('Dataset does not exist in either the gps generated or the actual h5 file: %s/%s/%s'%(f, g, d))
+                    
+    if if_bool: return True
 
 
 def my_batch(data, func, batch_sz=100):
@@ -1449,7 +1471,7 @@ def gid_to_miso(ims_unfold, miso_matrices):
 
 
 
-def neighborhood_miso(ims, miso_matrices, window_size=3, pad_mode='circular'): 
+def neighborhood_miso(ims, miso_matrices, window_size=3, pad_mode='circular', model='PRIMME'): 
     # ims - torch.Tensor of shape [# of images, 1, dim1, dim2, dim3(optional)]
     # miso_matrices: grain id misorientations in radians, shape=(num_images, dim1, dim2)
     # window_size - the patch around each pixel that constitutes its neighbors
@@ -1472,8 +1494,11 @@ def neighborhood_miso(ims, miso_matrices, window_size=3, pad_mode='circular'):
         im_unfold_miso = gid_to_miso(im_unfold, miso_matrices)
         log.append(torch.sum(im_unfold_miso, axis=1)[0])
         
-    if pad_mode==None: s = ims.shape[:2]+tuple(np.array(ims.shape[2:])-window_size+1)
-    else: s = ims.shape
+    if model == 'SPPARKS':
+        s = sum(len(item) for item in log)
+    else: # PRIMME
+        if pad_mode==None: s = ims.shape[:2]+tuple(np.array(ims.shape[2:])-window_size+1)
+        else: s = ims.shape 
     ims_miso = torch.cat(log).reshape(s) #misorientation image
     
     
@@ -1536,24 +1561,37 @@ def neighborhood_miso_spparks(ims, miso_matrices, cut=25, window_size=3, pad_mod
     # tmp[ims_unfold_miso>cut] = 1
     # ims_miso = torch.sum(tmp, axis=1).reshape(s) #misorientation image
     
-    return ims_miso #reshape to orignal image shape
+    return ims_miso #reshape to original image shape
 
 
 def mean_wo_zeros(a):
     return torch.sum(a)/torch.sum(a!=0)
 
+def pad_arrays(arrays, pad_value=0):
+    if all(arr.shape == arrays[0].shape for arr in arrays[1:]):
+        return arrays  # No padding needed
+    max_len = max(arr.shape[0] for arr in arrays)
+    return [np.pad(arr, (0, max_len - arr.shape[0]), constant_values=pad_value) for arr in arrays]
 
-def iterate_function(array, func, args=[], n=None, device=device):
+def iterate_function(array, func, args=[], n=None, device=device, optional=None):
     
     #Iterate through the first dimension in "array" and apply "func" using "args"
     if n is None: ii = np.arange(len(array))
     else: ii = np.linspace(0,len(array)-1,n).astype(int)
     log = []
-    for i in tqdm(ii, 'In progress: %s'%func.__name__):
-        im = torch.from_numpy(array[i:i+1,][:].astype('float')).to(device)
-        tmp = func(im, *args).cpu().numpy()
-        log.append(tmp)
-    return np.stack(log)
+    if optional:
+        for i in tqdm(ii, 'In progress: %s'%func.__name__):
+            im = torch.from_numpy(array[i:i+1,][:].astype('float')).to(device)
+            tmp = func(im, *args, model=optional).cpu().numpy()
+            log.append(tmp)
+    else:
+        for i in tqdm(ii, 'In progress: %s'%func.__name__):
+            im = torch.from_numpy(array[i:i+1,][:].astype('float')).to(device)
+            tmp = func(im, *args).cpu().numpy()
+            log.append(tmp)
+    padded_log = pad_arrays(log)
+    result = np.stack(padded_log)
+    return result
     
     # log = []
     # for i in tqdm(range(array.shape[0]), 'In progress: %s'%func.__name__):
@@ -1562,10 +1600,29 @@ def iterate_function(array, func, args=[], n=None, device=device):
     #     log.append(tmp)
     # return np.stack(log)
 
+def generate_SPPARKS_miso_matrix(hps, device=device):
+    with h5py.File(hps, 'r') as f:
+        #euler_angles = f['euler_angles'][:]
+        #ims_id = f['ims_id'][:]
+        miso_array = f['miso_array'][:]
+        miso_matrix = miso_array_to_matrix(torch.from_numpy(miso_array)).to(device)
 
+    # save to the hps h5 file
+    with h5py.File(hps, 'a') as f:
+        dset = f.create_dataset("miso_matrix", shape=miso_matrix[0].shape)
+        dset[:] = miso_matrix[0].cpu() #same values as mis0_array, different format
+    return
+
+# gps assumes that this is a PRIMME model, as such, if we specify that it is SPPARKS, we are able to handle the file differently
+# TODO: for safer programming, gps string should only be used for settings (last / SPPARKS) options and the gps list used should be turned into an optional list that gets filled
 def compute_grain_stats(hps, gps='last', n=None, device=device):
     
     #Make 'hps' and 'gps' a list if it isn't already, and set default 'gps'
+    if gps == 'spparks':
+        mode = gps
+    else:
+        mode = 'PRIMME'
+        
     if type(hps)!=list: hps = [hps]
     
     if gps=='last':
@@ -1575,12 +1632,20 @@ def compute_grain_stats(hps, gps='last', n=None, device=device):
                 gps.append(list(f.keys())[-1])
         print('Last groups in each h5 file chosen:')
         print(gps)
+    elif gps=='spparks':
+        gps = []
+        with h5py.File(hps[0], 'r') as f:
+            for key in f.keys():
+                gps.append(key)
     else:
         if type(gps)!=list: gps = [gps]
     
     #Make sure the files needed actually exist
     dts = ['ims_id', 'euler_angles', 'miso_matrix']
-    check_exist_h5(hps, gps, dts, if_bool=False)
+    if mode == 'spparks':
+        check_exist_h5_spparks(hps, gps, dts, if_bool=False)
+    else:
+        check_exist_h5(hps,gps,dts, if_bool=False)
     
     for i in range(len(hps)):
         hp = hps[i]
@@ -1591,8 +1656,14 @@ def compute_grain_stats(hps, gps='last', n=None, device=device):
         with h5py.File(hp, 'a') as f:
             
             # Setup
-            g = f[gp]
-            d = g['ims_id']
+            if mode == 'spparks':
+                g = f
+                d = g['ims_id']
+            # PRIMME
+            else:
+                g = f[gp]
+                d = g['ims_id']
+                
             max_id = g['euler_angles'].shape[0] - 1
             miso_matrix = torch.from_numpy(g['miso_matrix'][:]).to(device)
             
@@ -1632,9 +1703,13 @@ def compute_grain_stats(hps, gps='last', n=None, device=device):
             
             # Find misorientation images
             if 'ims_miso' not in g.keys():
+                if mode == 'spparks':
+                    optional = 'SPPARKS'
+                else:
+                    optional = None
                 args = [miso_matrix[None,]]
                 func = neighborhood_miso
-                ims_miso = iterate_function(d, func, args, n)[:,0]
+                ims_miso = iterate_function(d, func, args, n, optional=optional)[:,0]
                 g['ims_miso'] = ims_miso
                 print('Calculated: ims_miso')
             else: ims_miso = None
@@ -1665,11 +1740,12 @@ def compute_grain_stats(hps, gps='last', n=None, device=device):
             #     print('Calculated: ims_miso_spparks_avg')
                 
             # Find dihedral angle standard deviation
-            if 'dihedral_std' not in g.keys():
-                func = find_dihedral_stats
-                dihedral_std = iterate_function(d, func, n=n)
-                g['dihedral_std'] = dihedral_std
-                print('Calculated: dihedral_std')
+            # NOT NECESSARY FOR 3D
+            # if 'dihedral_std' not in g.keys():
+            #     func = find_dihedral_stats
+            #     dihedral_std = iterate_function(d, func, n=n)
+            #     g['dihedral_std'] = dihedral_std
+            #     print('Calculated: dihedral_std')
             
             # # Find grain aspect ratios
             # if 'aspects' not in g.keys():
@@ -2392,6 +2468,9 @@ def find_dihedral_angles(im, if_plot=False, num_plot_jct=10, pad_mode='circular'
     ncombo_avg = find_ncombo_avg(ncombo, im.shape[2:]) #find the average location of those found in the same triplet
     adj = find_juntion_neighbors(ncombo_avg)  #find the neighbors for each triplet (share two of the same IDs)
     
+    if adj is None:
+        return None
+        
     # Keep only triplets with 3 neighbors (true triplets)
     i = torch.sum(adj, dim=0)==3 
     adj1 = adj[i, :] 
@@ -3032,6 +3111,7 @@ def find_dihedral_stats(ims, if_plot=False):
     
     # ims = torch.from_numpy(ims.astype(int))
     d = ims.dim() - 2 #2D or 3D?
+    print(ims.shape)
     if d==2: ims = ims[...,None]
     
     num_ims, _, _, _, dim_size = ims.shape
