@@ -4,3 +4,5 @@
 # Data and Plots (Must be manually added)
 /PRIMME/data/*
 /PRIMME/plots/*
+
+/PRIMME/__pycache__/*
