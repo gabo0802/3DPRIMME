@@ -1,6 +1,6 @@
 # Spparks Simulation
-./PRIMME/sppars_simulation*
+/PRIMME/spparks_simulation/*
 
 # Data and Plots (Must be manually added)
-./PRIMME/data*
-./PRIMME/plots*
+/PRIMME/data/*
+/PRIMME/plots/*
