@@ -24,7 +24,7 @@ import matplotlib.colors as mcolors
 
 
 ### Script
-
+# changing this from 4e9 to 4e6
 unfold_mem_lim = 4e9
 
 fp = './data/'
@@ -820,7 +820,7 @@ def process_dump(path_to_dump='./spparks_simulations/spparks.dump'):
     
     return ims_id, euler_angles, ims_energy
 
-
+# initial defaults: size=[257,257], ngrains_rng=[256, 256], kt=0.66, cutoff=25.0, nsets=200, max_steps=100, offset_steps=1, future_steps=4, freq = (1,1), del_sim=False
 def create_SPPARKS_dataset(size=[257,257], ngrains_rng=[256, 256], kt=0.66, cutoff=25.0, nsets=200, max_steps=100, offset_steps=1, future_steps=4, freq = (1,1), del_sim=False):
     #'freq' - [how often to report stats on the simulation, how often to dump an image or record]
             
@@ -858,7 +858,6 @@ def create_SPPARKS_dataset(size=[257,257], ngrains_rng=[256, 256], kt=0.66, cuto
             run_spparks(im, ea, nsteps, kt, cutoff, freq, rseed, miso_array=miso_array, save_sim=False, del_sim=del_sim, path_sim=path_sim, num_processors=32)
             grain_ID_images, grain_euler_angles, ims_energy = process_dump('%s/spparks.dump'%path_sim)
             # miso = np.loadtxt('%s/Miso.txt'%path_sim)*cutoff/180*np.pi #convert to radians
-            
             # WRITE TO FILE
             dset[i,] = grain_ID_images[-(future_steps+1):,] 
             dset1[i,] = ims_energy[-(future_steps+1):,] 
@@ -1484,7 +1483,7 @@ def neighborhood_miso(ims, miso_matrices, window_size=3, pad_mode='circular', mo
     d = ims.dim()-2
     kernel_sz = window_size*d
     stride = (1,)*d
-    
+    # changing this from *64 to *128
     batch_sz = int(unfold_mem_lim/(torch.prod(torch.Tensor(kernel_sz))*64))
     unfold_gen = unfold_in_batches(ims[0,0], batch_sz, kernel_sz, stride, pad_mode)
       
@@ -1701,6 +1700,7 @@ def compute_grain_stats(hps, gps='last', n=None, device=device):
                 g['grain_sides_avg'] = grain_sides_avg
                 print('Calculated: grain_sides_avg')
             
+            # NOT RELEVANT CURRENTLY FOR 3D
             # Find misorientation images
             if 'ims_miso' not in g.keys():
                 if mode == 'spparks':
@@ -1739,13 +1739,13 @@ def compute_grain_stats(hps, gps='last', n=None, device=device):
             #     g['ims_miso_spparks_avg'] = ims_miso_spparks_avg
             #     print('Calculated: ims_miso_spparks_avg')
                 
-            # Find dihedral angle standard deviation
+            # Find dihedral angle standard deviation / commenting out
             # NOT NECESSARY FOR 3D
-            # if 'dihedral_std' not in g.keys():
-            #     func = find_dihedral_stats
-            #     dihedral_std = iterate_function(d, func, n=n)
-            #     g['dihedral_std'] = dihedral_std
-            #     print('Calculated: dihedral_std')
+            # # if 'dihedral_std' not in g.keys():
+            # #     func = find_dihedral_stats
+            # #     dihedral_std = iterate_function(d, func, n=n)
+            # #     g['dihedral_std'] = dihedral_std
+            # #     print('Calculated: dihedral_std')
             
             # # Find grain aspect ratios
             # if 'aspects' not in g.keys():
@@ -1774,8 +1774,18 @@ def compute_grain_stats(hps, gps='last', n=None, device=device):
             #curvature
 
 
-def make_videos(hps, gps='last'):
+def make_videos(hps, gps='last', multi_res=False, epoch=-1):
     # Run "compute_grain_stats" before this function
+
+    # Set location, a 'plots' needs to already exist
+    loc = './plots/'
+    if not os.path.exists(loc): os.makedirs(loc)
+
+    # if multi_res, create paths for this specific one:
+    if multi_res:
+        if not os.path.exists(loc+'/epoch%d/'%epoch): os.makedirs(loc+'/epoch%d/'%epoch)
+        loc = loc+'/epoch%d/'%epoch
+
     
     #Make 'hps' and 'gps' a list if it isn't already
     if type(hps)!=list: hps = [hps]
@@ -1809,8 +1819,8 @@ def make_videos(hps, gps='last'):
             
             ims = g['ims_id'][:,0,j]
             ims = (255/np.max(ims)*ims).astype(np.uint8)
-            imageio.mimsave('./plots/ims_id%d.mp4'%(i), ims)
-            imageio.mimsave('./plots/ims_id%d.gif'%(i), ims)
+            imageio.mimsave(loc+'/ims_id%d.mp4'%(i), ims)
+            imageio.mimsave(loc+'/ims_id%d.gif'%(i), ims)
             
             # ims = g['ims_miso'][:,0,j]
             # ims = (255/np.max(ims)*ims).astype(np.uint8)
@@ -1823,8 +1833,17 @@ def make_videos(hps, gps='last'):
             # imageio.mimsave('./plots/ims_miso_spparks%d.gif'%(i), ims)
 
         
-def make_time_plots(hps, gps='last', scale_ngrains_ratio=0.05, cr=None, legend=True, if_show=True):
+def make_time_plots(hps, gps='last', scale_ngrains_ratio=0.05, cr=None, legend=True, if_show=True, multi_res=False, epoch=-1):
     # Run "compute_grain_stats" before this function
+
+    # Set location, a 'plots' needs to already exist
+    loc = './plots/'
+    if not os.path.exists(loc): os.makedirs(loc)
+
+    # if multi_res, create paths for this specific one:
+    if multi_res:
+        if not os.path.exists(loc+'/epoch%d/'%epoch): os.makedirs(loc+'/epoch%d/'%epoch)
+        loc = loc+'/epoch%d/'%epoch
     
     #Make 'hps' and 'gps' lists if they aren't already, and set default 'gps'
     if type(hps)!=list: hps = [hps]
@@ -1900,7 +1919,7 @@ def make_time_plots(hps, gps='last', scale_ngrains_ratio=0.05, cr=None, legend=T
     plt.xlabel('Number of frames')
     plt.ylabel('Average area (pixels)')
     if legend==True: plt.legend(legend)
-    plt.savefig('./plots/avg_grain_area_time', dpi=300)
+    plt.savefig(f'{loc}/avg_grain_area_time', dpi=300)
     if if_show: plt.show()
 
     # Plot scaled average grain radius squared through time and find linear slopes
@@ -1937,7 +1956,7 @@ def make_time_plots(hps, gps='last', scale_ngrains_ratio=0.05, cr=None, legend=T
     plt.xlabel('Number of grains')
     plt.ylabel('Average area (pixels)')
     if legend==True: plt.legend(legend)
-    plt.savefig('./plots/avg_grain_area_time_scaled', dpi=300)
+    plt.savefig(f'{loc}/avg_grain_area_time_scaled', dpi=300)
     if if_show: plt.show()
     
     # Plot average grain sides through time
@@ -1956,7 +1975,7 @@ def make_time_plots(hps, gps='last', scale_ngrains_ratio=0.05, cr=None, legend=T
     plt.xlabel('Number of frames')
     plt.ylabel('Average number of sides')
     if legend==True: plt.legend(legend)
-    plt.savefig('./plots/avg_grain_sides_time', dpi=300)
+    plt.savefig(f'{loc}/avg_grain_sides_time', dpi=300)
     if if_show: plt.show()
     
     # Plot scaled average grain sides through time
@@ -1970,7 +1989,7 @@ def make_time_plots(hps, gps='last', scale_ngrains_ratio=0.05, cr=None, legend=T
     plt.xlabel('Number of grains')
     plt.ylabel('Average number of sides')
     if legend==True: plt.legend(legend)
-    plt.savefig('./plots/avg_grain_sides_time_scaled', dpi=300)
+    plt.savefig(f'{loc}/avg_grain_sides_time_scaled', dpi=300)
     if if_show: plt.show()
     
     # Plot grain radius distribution
@@ -1996,7 +2015,7 @@ def make_time_plots(hps, gps='last', scale_ngrains_ratio=0.05, cr=None, legend=T
     plt.xlabel('R/<R>')
     plt.ylabel('Frequency')
     if legend==True: plt.legend(legend)
-    plt.savefig('./plots/normalized_radius_distribution', dpi=300)
+    plt.savefig(f'{loc}/normalized_radius_distribution', dpi=300)
     if if_show: plt.show()
     
     # Plot number of sides distribution
@@ -2024,7 +2043,7 @@ def make_time_plots(hps, gps='last', scale_ngrains_ratio=0.05, cr=None, legend=T
     plt.xlabel('Number of sides')
     plt.ylabel('Frequency')
     if legend==True: plt.legend(legend)
-    plt.savefig('./plots/number_sides_distribution', dpi=300)
+    plt.savefig(f'{loc}/number_sides_distribution', dpi=300)
     if if_show: plt.show()
         
     # # Plot average misorientation per bounday pixel
