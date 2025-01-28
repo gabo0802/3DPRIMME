@@ -612,7 +612,7 @@ def train_primme(trainset, num_eps, obs_dim=17, act_dim=17, lr=5e-5, reg=1, pad_
         
         val_loss = agent.validation_loss[-1]
         if i % 100 ==0:
-            agent.save(f"{modelname}_at_epoch({i})")
+            agent.save(f"{modelname[:-3]}_at_epoch({i}).h5")
 
         if val_loss<best_validation_loss:
             best_validation_loss = val_loss

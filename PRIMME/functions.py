@@ -1774,10 +1774,8 @@ def compute_grain_stats(hps, gps='last', n=None, device=device):
             #curvature
 
 
-def make_videos(hps, gps='last', multi_res=False, epoch=-1):
-    # Run "compute_grain_stats" before this function
-
-    # Set location, a 'plots' needs to already exist
+def define_location(multi_res, epoch):
+     # Set location, a 'plots' needs to already exist
     loc = './plots/'
     if not os.path.exists(loc): os.makedirs(loc)
 
@@ -1785,8 +1783,14 @@ def make_videos(hps, gps='last', multi_res=False, epoch=-1):
     if multi_res:
         if not os.path.exists(loc+'/epoch%d/'%epoch): os.makedirs(loc+'/epoch%d/'%epoch)
         loc = loc+'/epoch%d/'%epoch
+    return loc
 
-    
+def make_videos(hps, gps='last', multi_res=False, epoch=-1):
+    # Run "compute_grain_stats" before this function
+
+    # Set location, a 'plots' directory needs to already exist:
+    loc = define_location(multi_res, epoch)
+
     #Make 'hps' and 'gps' a list if it isn't already
     if type(hps)!=list: hps = [hps]
     
@@ -1832,18 +1836,14 @@ def make_videos(hps, gps='last', multi_res=False, epoch=-1):
             # imageio.mimsave('./plots/ims_miso_spparks%d.mp4'%(i), ims)
             # imageio.mimsave('./plots/ims_miso_spparks%d.gif'%(i), ims)
 
-        
+def make_3D_views(hps, gps='last', multi_res=False, epoch=-1):
+    # TODO - for 3D models, make a 3D view of the grain structure, preferably the animation of a 46x46x46 if possible?
+    return 0
 def make_time_plots(hps, gps='last', scale_ngrains_ratio=0.05, cr=None, legend=True, if_show=True, multi_res=False, epoch=-1):
     # Run "compute_grain_stats" before this function
 
-    # Set location, a 'plots' needs to already exist
-    loc = './plots/'
-    if not os.path.exists(loc): os.makedirs(loc)
-
-    # if multi_res, create paths for this specific one:
-    if multi_res:
-        if not os.path.exists(loc+'/epoch%d/'%epoch): os.makedirs(loc+'/epoch%d/'%epoch)
-        loc = loc+'/epoch%d/'%epoch
+    # Set location, a 'plots' directory needs to already exist:
+    loc = define_location(multi_res, epoch)
     
     #Make 'hps' and 'gps' lists if they aren't already, and set default 'gps'
     if type(hps)!=list: hps = [hps]

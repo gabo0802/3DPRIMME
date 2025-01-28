@@ -64,7 +64,7 @@ ma = fs.find_misorientation(ea, mem_max=1)
 
 
 for epoch in range(0, num_eps, 100):
-    cur_model = f"{modelname}_at_epoch({epoch})"
+    cur_model = f"{modelname[:-3]}_at_epoch({epoch}).h5"
     fp = fsp.run_primme(ic, ea, nsteps=1000, modelname=cur_model, miso_array=ma, pad_mode='circular', if_miso=False, plot_freq=1)
     fs.compute_grain_stats(fp)
     fs.make_videos(fp, multi_res=True, epoch=epoch)
