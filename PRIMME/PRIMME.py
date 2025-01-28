@@ -26,7 +26,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 class PRIMME(nn.Module):
     def __init__(self, obs_dim=17, act_dim=17, energy_dim=3, pad_mode='circular', learning_rate=5e-5, reg=1, num_dims=2, if_miso=False):
         super(PRIMME, self).__init__()
-        
+    
         # self.device = device
         self.obs_dim = obs_dim
         self.act_dim = act_dim
@@ -58,6 +58,7 @@ class PRIMME(nn.Module):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)#, weight_decay=1e-5)
         self.loss_func = torch.nn.MSELoss()  # Mean squared error loss
         self.optimizer.zero_grad()  # Make all the gradients zero
+                
     
     
     def forward(self, x):
@@ -131,7 +132,8 @@ class PRIMME(nn.Module):
         im = im_seq[0:1,]
         num_future = im_seq.shape[0]-1
         if num_future>0: 
-            labels_gen = fs.compute_labels_gen(im_seq, batch_sz, self.act_dim, self.energy_dim, self.reg, self.pad_mode)
+            # the 0 here is self.reg
+            labels_gen = fs.compute_labels_gen(im_seq, batch_sz, self.act_dim, self.energy_dim, 0, self.pad_mode)
             im_next_true_split = im_seq[1:2,].flatten().split(batch_sz)
         
         im_unfold_gen = fs.unfold_in_batches(im[0,0], batch_sz, [self.obs_dim,]*self.num_dims, [1,]*self.num_dims, self.pad_mode)
@@ -187,7 +189,7 @@ class PRIMME(nn.Module):
             
             
             
-            tmp = torch.rand(outputs.shape).to(outputs.device)/1e9
+            tmp = torch.rand(outputs.shape).to(outputs.device)/1e12
             
             switch_i = (outputs+tmp).argmax(1)
             # switch_i = (outputs).argmax(1)
@@ -198,9 +200,9 @@ class PRIMME(nn.Module):
             next_ids[use_i] = im_unfold[use_i,][torch.arange(len(use_i)),switch_i]
             im_next_log.append(next_ids)
             
-            iii, jjj = fs.shape_indices(switch_i, torch.Tensor([17,17]))
-            logx.append(iii.float().mean().cpu()-8)
-            logy.append(jjj.float().mean().cpu()-8)
+            iii, jjj = fs.shape_indices(switch_i, torch.Tensor([action_likelyhood.shape[0], action_likelyhood.shape[1]]))
+            logx.append(iii.float().mean().cpu()-action_likelyhood.shape[0] // 2)
+            logy.append(jjj.float().mean().cpu()-action_likelyhood.shape[1] // 2)
             
             #what is the mean of the outputs
             # ooo = outputs_rot
@@ -246,7 +248,7 @@ class PRIMME(nn.Module):
                     # plt.show()
                     
                     
-                    loss += self.loss_func(oo, ll)*len(use_i) #convert MSE loss back to sum to find average of total
+                    loss += self.loss_func(o, l)*len(use_i) #convert MSE loss back to sum to find average of total
                    
                     # loss += self.loss_func(outputs, labels[use_i,])*len(use_i) #convert MSE loss back to sum to find average of total
                     next_ids_true = im_next_true_split[i]
@@ -593,6 +595,14 @@ def train_primme(trainset, num_eps, obs_dim=17, act_dim=17, lr=5e-5, reg=1, pad_
     modelname = "./data/model_dim(%d)_sz(%d_%d)_lr(%.0e)_reg(%d)_ep(%d)_kt%s"%(dims, obs_dim, act_dim, lr, reg, num_eps, append_name)
     agent = PRIMME(obs_dim=obs_dim, act_dim=act_dim, pad_mode=pad_mode, learning_rate=lr, reg=reg, num_dims=dims, if_miso=if_miso).to(device)
     
+    # # Code to split into GPUs
+    # top_agent = PRIMME(obs_dim=obs_dim, act_dim=act_dim, pad_mode=pad_mode, learning_rate=lr, reg=reg, num_dims=dims, if_miso=if_miso).to(device)
+    # top_agent = nn.DataParallel(top_agent)
+    
+    # # Move model to device
+    # top_agent.to(device)
+    # agent = top_agent.module
+    
     best_validation_loss = 1e9
     
     for i in tqdm(range(num_eps), desc='Epochs', leave=True):
@@ -601,6 +611,9 @@ def train_primme(trainset, num_eps, obs_dim=17, act_dim=17, lr=5e-5, reg=1, pad_
         agent.evaluate_model()
         
         val_loss = agent.validation_loss[-1]
+        if i % 100 ==0:
+            agent.save(f"{modelname}_at_epoch({i})")
+
         if val_loss<best_validation_loss:
             best_validation_loss = val_loss
             agent.save(modelname)
@@ -639,7 +652,11 @@ def run_primme(ic, ea, nsteps, modelname, miso_array=None, pad_mode='circular', 
     
     # Setup variables
     d = len(ic.shape)
-    agent = PRIMME(num_dims=d).to(device)
+    # Dimensions
+    obs_dim, act_dim = np.array(modelname.split("sz(")[1].split(")_lr(")[0].split("_")).astype(int)
+    # Code Pre-Split
+    agent = PRIMME(num_dims=d, obs_dim=obs_dim, act_dim=act_dim).to(device)
+        
     agent.load_state_dict(torch.load(modelname))
     agent.pad_mode = pad_mode
     im = torch.Tensor(ic).unsqueeze(0).unsqueeze(0).float().to(device)
