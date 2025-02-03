@@ -48,15 +48,16 @@ trainset = './data/trainset_spparks_sz(93x93x93)_ng(256-256)_nsets(200)_future(4
 #trainset = './data/trainset_spparks_sz(64x64x64)_ng(1024-1024)_nsets(200)_future(4)_max(10)_kt(0.66)_freq(0.1)_cut(0).h5'
 # trainset = './data/trainset_spparks_sz(128x128x128)_ng(512-512)_nsets(200)_future(4)_max(50)_kt(0.66)_freq(0.5)_cut(0).h5'
 
-num_eps = 1000
+num_eps = 2000
 modelname = fsp.train_primme(trainset, num_eps=num_eps, obs_dim=9, act_dim=9, lr=5e-5, reg=1, if_miso=False, plot_freq=1)
 #modelname = './data/model_dim(3)_sz(13_13)_lr(5e-05)_reg(1)_ep(3000)_kt(0.66)_freq(0.5)_cut(0).h5'
 
-#ic, ea, _ = fs.voronoi2image(size=[93,93,93], ngrain=2**14)
-#ma = fs.find_misorientation(ea, mem_max=1) 
+# was 93^3
+ic, ea, _ = fs.voronoi2image(size=[96,96,96], ngrain=2**14)
+ma = fs.find_misorientation(ea, mem_max=1) 
 
-#np.save("./data/ic.npy", ic), np.save("./data/ea.npy", ea), np.save("./data/ma.npy", ma)
-ic, ea, ma = np.load("./data/ic.npy"), np.load("./data/ea.npy"), np.load("./data/ma.npy")
+np.save("./data/ic.npy", ic), np.save("./data/ea.npy", ea), np.save("./data/ma.npy", ma)
+#ic, ea, ma = np.load("./data/ic.npy"), np.load("./data/ea.npy"), np.load("./data/ma.npy")
 
 
 for epoch in range(0, num_eps -1, 100):
