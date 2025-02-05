@@ -136,6 +136,7 @@ class PRIMME(nn.Module):
             labels_gen = fs.compute_labels_gen(im_seq, batch_sz, self.act_dim, self.energy_dim, 0, self.pad_mode)
             im_next_true_split = im_seq[1:2,].flatten().split(batch_sz)
         
+        # needs to be further batched, split into features and train on those batches
         im_unfold_gen = fs.unfold_in_batches(im[0,0], batch_sz, [self.obs_dim,]*self.num_dims, [1,]*self.num_dims, self.pad_mode)
         if miso_matrix is None:
             features_gen = fs.compute_features_gen(im, batch_sz, self.obs_dim, self.pad_mode)
@@ -149,7 +150,7 @@ class PRIMME(nn.Module):
         accuracy = 0
         num_features = 0
         im_next_log = []
-        
+
         logx = []
         logy = []
         
@@ -225,9 +226,6 @@ class PRIMME(nn.Module):
                     action_likelyhood_true += labels[use_i,].sum(0).detach().cpu().reshape((self.act_dim,)*self.num_dims)
                     
                     
-                    
-                    
-                    
                     l = labels[use_i,]
                     o = outputs
                     
@@ -247,7 +245,7 @@ class PRIMME(nn.Module):
                     # plt.imshow(((ll-oo)**2).mean(0).reshape(17,17).detach().cpu())
                     # plt.show()
                     
-                    
+                    # all loss information is averaged together, this needs to be batched
                     loss += self.loss_func(o, l)*len(use_i) #convert MSE loss back to sum to find average of total
                    
                     # loss += self.loss_func(outputs, labels[use_i,])*len(use_i) #convert MSE loss back to sum to find average of total
@@ -261,7 +259,7 @@ class PRIMME(nn.Module):
         self.logx.append(np.stack(logx).mean(0)) #center of mass of whole step
         self.logy.append(np.stack(logy).mean(0)) #center of mass of whole step
         
-        # Find average of loss and accuracy
+        # Find average of loss and accuracy, all need to be reorganized
         if num_future>0 and num_features>0: 
             action_likelyhood /= num_features
             action_likelyhood_true /= num_features
@@ -510,12 +508,14 @@ class PRIMME(nn.Module):
     def train_model(self):
         
         # self.train()
+        # loss is not batched
+        # 5000 cubes, average each of their losses
         
         _, loss, _, _, _ = self.step(self.im_seq, self.miso_matrix)
         
         self.optimizer.zero_grad()  # Zero the gradient
         loss.backward()             # Perform backpropagation
-        self.optimizer.step()       # Step with optimizer 
+        self.optimizer.sp()       # Step with optimizer 
         
         
     def plot(self, fp_results='./plots'):
