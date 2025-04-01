@@ -141,8 +141,11 @@ class PRIMME(nn.Module):
         #Calculates misorientation features of "miso_matrix" is given
         
         #Calculate input batch size to maintain memory usage limit 
-        batch_sz = 5000 # 5000 10000 20000 50000 100000 200000 500000[]
-        #int(unfold_mem_lim/((num_future)*self.act_dim**self.num_dims*self.energy_dim**self.num_dims*64)) #set to highest memory functions - "compute_energy_labels_gen"
+        batch_sz = 5000 # 5000 10000 20000 50000 100000 200000 500000
+        ''''
+        Previous batching calculation: 
+        int(unfold_mem_lim/((num_future)*self.act_dim**self.num_dims*self.energy_dim**self.num_dims*64)) #set to highest memory functions - "compute_energy_labels_gen"
+        '''
         im = im_seq[0:1,]
 
         # Initialize variables and
@@ -209,14 +212,6 @@ class PRIMME(nn.Module):
                 self.optimizer.step()  # Step optimizer to update weights
                 self.optimizer.zero_grad()  # Reset gradients for next batch
                 # running_loss += batch_loss
-
-                # Compute the true label index for each sample
-                # true_labels = flattened_labels.argmax(dim=1)  # [N]
-                # Compute accuracy by comparing predictions to true labels
-                # batch_accuracy = torch.sum(next_ids[use_i] == true_labels).float() / batch_sz
-                # running_accuracy += batch_accuracy
-
-                # total_batches += 1
             
         return
       
@@ -294,20 +289,6 @@ class PRIMME(nn.Module):
             logx.append(iii.float().mean().cpu()-action_likelyhood.shape[0] // 2)
             logy.append(jjj.float().mean().cpu()-action_likelyhood.shape[1] // 2)
             
-            #what is the mean of the outputs
-            # ooo = outputs_rot
-            # ooo = outputs
-            
-            # tmp = ooo.mean(0).reshape(17,17).detach().cpu()
-            # aaa = np.stack((np.average(np.arange(17), weights=tmp.sum(0)), np.average(np.arange(17), weights=tmp.sum(1))))-8
-            # log0.append(aaa)
-            
-            # m = ooo.max(1)[0]
-            # tmp = (m[:,None]==ooo).sum(0).reshape(17,17).cpu()
-            # bbb = np.stack((np.average(np.arange(17), weights=tmp.sum(0)), np.average(np.arange(17), weights=tmp.sum(1))))-8
-            # log1.append(bbb)
-            
-        
             # Calculate loss and accuracy
             if num_future>0 and batch_output_sz > 0: 
                 labels = next(labels_gen).reshape(-1, self.act_dim**self.num_dims)
@@ -324,34 +305,6 @@ class PRIMME(nn.Module):
                     running_accuracy += batch_accuracy
                     
                     total_batches += 1
-                    
-                    ## all loss information is averaged together, this needs to be batched
-                    # - everything in the loop below this was manually commented for batch test
-
-                    # l = labels[use_i,]
-                    # o = outputs
-        
-                    # om = o.mean(1)[:,None]
-                    # os = o.std(1)[:,None]
-                    # oo = (o-om)/os
-                    
-                    # lm = l.mean(1)[:,None]
-                    # ls = l.std(1)[:,None]
-                    # ll = (l-lm)/ls
-                    
-                    
-                    # # plt.imshow(oo.mean(0).reshape(17,17).detach().cpu())
-                    # # plt.imshow(ll.mean(0).reshape(17,17).detach().cpu())
-                    # # plt.figure()
-                    # # plt.imshow(((ll-oo)**2).mean(0).reshape(17,17).detach().cpu())
-                    # # plt.show()
-                    
-                    # loss += self.loss_func(o, l)*len(use_i) #convert MSE loss back to sum to find average of total
-                   
-                    # # loss += self.loss_func(outputs, labels[use_i,])*len(use_i) #convert MSE loss back to sum to find average of total
-                    # next_ids_true = im_next_true_split[i]
-                    # accuracy += torch.sum(next_ids[use_i] == next_ids_true[use_i]).float() #sum number of correct ID predictions
-                    # num_features += len(use_i) #track total number of features for averaging later
                     
         # Concatenate batches to form next image (as predicted)
         im_next = torch.cat(im_next_log).reshape(im.shape)
@@ -384,17 +337,9 @@ class PRIMME(nn.Module):
     
         
     def train_model(self):
-        
-        # self.train()
-        # loss is not batched
-        # 5000 cubes, average each of their losses
-        
+        # Train the model using the custom-batched train_step
         self.optimizer.zero_grad()  # Zero the gradient
         self.train_step(self.im_seq, self.miso_matrix)
-        #_, loss, _, _, _ = self.step(self.im_seq, self.miso_matrix)
-        # self.optimizer.zero_grad()  # Zero the gradient
-        # loss.backward()             # Perform backpropagation (might want to move into step for batching)
-        # self.optimizer.step()       # Step with optimizer 
         
         
     def plot(self, fp_results='./plots'):
@@ -585,148 +530,5 @@ def run_primme(ic, ea, nsteps, modelname, miso_array=None, pad_mode='circular', 
                     s = (0,0,slice(None), slice(None),) + (int(im.shape[-1]/2),)*(d-2)
                     plt.imshow(im[s].cpu(), interpolation=None) 
                     plt.show()
-                    
-                    
-                    
-                    # tmp0 = np.stack(agent.log0).T
-                    # tmp1 = np.stack(agent.log1).T
-                    
-                    # plt.figure()
-                    # plt.plot(tmp0[0], 'C0-') 
-                    # plt.plot(tmp0[1], 'C0--') 
-                    # plt.plot(tmp1[0], 'C1-') 
-                    # plt.plot(tmp1[1], 'C1--')  
-                    # plt.legend(['Mean Distribution (x)','Mean Distribution (y)','Mean Index (x)','Mean Index (y)'])
-                    # plt.xlabel('Number of Frames')
-                    # plt.ylabel('Num pixels from (0,0)')
-                    # plt.show()
-                    
-                    
-                    # plt.figure()
-                    # tmp0 = np.stack(log0).T
-                    # tmp1 = np.stack(log1).T
-                    # plt.plot(tmp0[0], tmp0[1], ',') 
-                    # plt.plot(tmp1[0], tmp1[1], ',') 
-                    
-                    # m = np.max([np.max(np.abs(tmp0)), np.max(np.abs(tmp1))])
-                    
-                    # plt.axis('square')
-                    # plt.xlim([-m,m])
-                    # plt.ylim([-m,m])
-                    # plt.legend(['CoM of mean distribution','Mean chosen index'])
-                    # plt.show()
                         
     return fp_save
-    
-    
-    
-    
-    
-    
-    # Run simulation
-    # ims_id = im
-    # for i in tqdm(range(nsteps), 'Running PRIMME simulation: '):
-        
-        #split up the image and pass it through step in batch_dim sizes, then reassemble
-        
-        #find grid indices
-        #find boundary expansion
-        #wrap_cut sections and pass them through
-        #place each output into a nested list
-        #numpy block to get final image
-        #save images one at a atime in an h5 file
-        
-        
-    #assumes 2d for now too, just update the "c"s later 
-    # with h5py.File(fp_save, 'a') as f:
-        
-    #     # If file already exists, create another group in the file for this simulaiton
-    #     num_groups = len(f.keys())
-    #     hp_save = 'sim%d'%num_groups
-    #     g = f.create_group(hp_save)
-        
-    #     # Save data
-    #     s = list(im.shape); s[0] = nsteps
-    #     dset = g.create_dataset("ims_id", shape=s, dtype=dtype)
-    #     dset2 = g.create_dataset("euler_angles", shape=ea.shape)
-    #     dset3 = g.create_dataset("miso_array", shape=miso_array.shape)
-    #     dset4 = g.create_dataset("miso_matrix", shape=miso_matrix.shape)
-    #     dset2[:] = ea
-    #     dset3[:] = miso_array #radians (does not save the exact "Miso.txt" file values, which are degrees divided by the cutoff angle)
-    #     dset4[:] = miso_matrix.cpu() #same values as mis0_array, different format
-        
-    #     batch_dims = [np.clip(b, 0, int(2*size[i]/3)) for i, b in enumerate(batch_dims)]
-    #     aaa = torch.Tensor(size/np.array(batch_dims)).long()+1
-    #     bbb = torch.stack(torch.meshgrid([torch.arange(aa) for aa in aaa])).reshape(2,-1).T.numpy()
-    #     n=8+3
-    #     for i in tqdm(range(nsteps), 'Running PRIMME simulation: '):
-            
-    #         im_next = im.clone()
-            
-    #         for j in bbb:
-                
-    #             mi = j*np.array(batch_dims) - n
-    #             ma = (np.clip((j+1)*np.array(batch_dims), np.zeros(2), size) + n)%size
-    #             slices_txt = ':,:,%d:%d,%d:%d'%(mi[0],ma[0],mi[1],ma[1])
-    #             batch = fs.wrap_slice(im, slices_txt)
-                
-    #             batch_p = agent.step(batch.clone(), miso_matrix, evaluate=False)
-                
-    #             strs = [str(int(mi[0]+n)),str(int(ma[0]-n)),str(int(mi[1]+n)),str(int(ma[1]-n))]
-    #             for k in range(len(strs)): 
-    #                 if strs[k]=='0': strs[k]=''
-    #             exec('im_next[:,:,%s:%s,%s:%s]=batch_p'%tuple(strs))
-            
-    #         im = im_next
-            
-    #         #Store
-    #         dset[i,:] = im[0].cpu()
-            
-    #         #Plot
-    #         if plot_freq is not None: 
-    #             if i%plot_freq==0:
-    #                 if dims==2: 
-    #                     plt.imshow(im[0,0,].cpu()); plt.show()
-            
-            
-            
-            #current limitation
-            #2d
-            #batch_dims can't be perfectly divisible into ic.shape
-        
-        
-        
-        
-        
-        
-    #     im = agent.step(im.clone(), miso_matrix[None,].to(device), evaluate=False)
-    #     ims_id = torch.cat([ims_id, im])
-    #     if plot_freq is not None: 
-    #         if i%plot_freq==0:
-    #             if dims==2: 
-    #                 plt.imshow(im[0,0,].cpu()); plt.show()
-    #             else: 
-    #                 m = int(size[0]/2)
-    #                 plt.imshow(im[0,0,m].cpu()); plt.show()
-            
-    # ims_id = ims_id.cpu().numpy()
-    
-    # # Save Simulation
-    # with h5py.File(fp_save, 'a') as f:
-        
-    #     # If file already exists, create another group in the file for this simulaiton
-    #     num_groups = len(f.keys())
-    #     hp_save = 'sim%d'%num_groups
-    #     g = f.create_group(hp_save)
-        
-    #     # Save data
-    #     dset = g.create_dataset("ims_id", shape=ims_id.shape, dtype=dtype)
-    #     dset2 = g.create_dataset("euler_angles", shape=ea.shape)
-    #     dset3 = g.create_dataset("miso_array", shape=miso_array.shape)
-    #     dset4 = g.create_dataset("miso_matrix", shape=miso_matrix.shape)
-    #     dset[:] = ims_id
-    #     dset2[:] = ea
-    #     dset3[:] = miso_array #radians (does not save the exact "Miso.txt" file values, which are degrees divided by the cutoff angle)
-    #     dset4[:] = miso_matrix #same values as mis0_array, different format
-
-    
