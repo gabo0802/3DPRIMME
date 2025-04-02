@@ -17,14 +17,12 @@ import imageio
 import matplotlib.pyplot as plt
 from unfoldNd import unfoldNd 
 import matplotlib.colors as mcolors
+from matplotlib import animation
+from mpl_toolkits.mplot3d import Axes3D
 # from uvw import RectilinearGrid, DataArray
 
 
-
-
-
 ### Script
-# changing this from 4e9 to 4e6
 unfold_mem_lim = 4e9
 
 fp = './data/'
@@ -35,10 +33,6 @@ if not os.path.exists(fp): os.makedirs(fp)
 
 device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # device=torch.device("cpu")
-
-
-
-
 
 ### General
 
@@ -1836,9 +1830,94 @@ def make_videos(hps, gps='last', multi_res=False, epoch=-1):
             # imageio.mimsave('./plots/ims_miso_spparks%d.mp4'%(i), ims)
             # imageio.mimsave('./plots/ims_miso_spparks%d.gif'%(i), ims)
 
-def make_3D_views(hps, gps='last', multi_res=False, epoch=-1):
-    # TODO - for 3D models, make a 3D view of the grain structure, preferably the animation of a 46x46x46 if possible?
-    return 0
+def make_3D_videos(hp, gp='last', multi_res=False, epoch=-1):
+    """Creates 3D animations of grain structures using matplotlib
+    
+    Args:
+        hp: Path to h5 file containing simulation data
+        gp: Group within h5 file to process, defaults to 'last'
+        multi_res: If True, saves in epoch-specific subdirectory
+        epoch: Epoch number for multi_res mode
+    """
+    
+    # Set location, a 'plots' directory needs to already exist:
+    loc = define_location(multi_res, epoch)
+
+    # Set default group
+    if gp == 'last':
+        with h5py.File(hp, 'r') as f:
+            gp = list(f.keys())[-2]
+        print(f'Last group chosen: {gp}')
+
+    with h5py.File(hp, 'r') as f:
+        g = f[gp]
+        ims = g['ims_id'][:] # Get all frames
+        
+        # Create figure and 3D axes
+        fig = plt.figure(figsize=(10, 10))
+        ax = fig.add_subplot(111, projection='3d')
+        
+        # Pre-compute coordinate matrices
+        x, y, z = np.meshgrid(
+            np.arange(ims.shape[2]),
+            np.arange(ims.shape[3]),
+            np.arange(ims.shape[4]),
+            indexing='ij'
+        )
+        
+        # Pre-compute colormap
+        max_grains = len(np.unique(ims))
+        colors = plt.cm.viridis(np.linspace(0, 1, max_grains))
+        
+        frames = []
+        for frame in tqdm(range(len(ims)), desc="Rendering frames"):
+            ax.clear()
+            im = ims[frame, 0]  # Get single timestep
+            
+            # Only process non-zero grains
+            mask = im > 0
+            points = np.column_stack((
+                x[mask].ravel(),
+                y[mask].ravel(),
+                z[mask].ravel()
+            ))
+            
+            # Get colors for visible grains
+            visible_grains = im[mask]
+            grain_colors = colors[visible_grains.ravel()]
+            
+            # Update scatter plot
+            ax.scatter(
+                points[:, 0], points[:, 1], points[:, 2],
+                c=grain_colors,
+                marker='s',
+                alpha=0.6,
+                s=10
+            )
+            
+            ax.set_title(f'Frame {frame}')
+            ax.set_xlabel('X')
+            ax.set_ylabel('Y')
+            ax.set_zlabel('Z')
+            ax.view_init(elev=30, azim=frame % 360)
+            
+            # Set consistent axis limits
+            ax.set_xlim(0, ims.shape[2])
+            ax.set_ylim(0, ims.shape[3])
+            ax.set_zlim(0, ims.shape[4])
+            
+            # Capture frame
+            fig.canvas.draw()
+            frame_data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+            frame_data = frame_data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+            frames.append(frame_data)
+        
+        # Save animations using imageio
+        imageio.mimsave(f'{loc}/3D_animation.mp4', frames)
+        imageio.mimsave(f'{loc}/3D_animation.gif', frames)
+        
+        plt.close()
+    
 def make_time_plots(hps, gps='last', scale_ngrains_ratio=0.05, cr=None, legend=True, if_show=True, multi_res=False, epoch=-1):
     # Run "compute_grain_stats" before this function
 
@@ -2331,7 +2410,7 @@ def find_ncombo_avg(ncombo, sz):
     # matches = torch.all(ids==ids.T, dim=1) #contruct a matching matrix (find which ID sets are equal)
     # nmatch = torch.sum(matches, dim=1) 
     
-    # #Find the mean without zeros of all matching ID sets - when there is a "0" and a "256" in the locations, wrap "256" to "-1"
+    #Find the mean without zeros of all matching ID sets - when there is a "0" and a "256" in the locations, wrap "256" to "-1"
     # tmp = []
     # for i in range(len(sz)): 
     #     num_hi = torch.sum(matches*ncombo[i+3,:]==sz[i]-1, dim=1)
