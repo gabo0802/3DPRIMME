@@ -45,6 +45,7 @@ for epoch in test_epocs:
     fs.compute_grain_stats(fp)
     fs.make_videos(fp, multi_res=True, epoch=epoch)
     fs.make_time_plots(fp, multi_res=True, epoch=epoch)
+    fs.make_3D_videos(fp,multi_res=True, epoch=epoch)
 fp= "./data/primme_sz(93x93x93)_ng(16384)_nsteps(1000)_freq(1)_kt(0.66)_freq(0.1)_cut(0).h5"
 
 #Last one

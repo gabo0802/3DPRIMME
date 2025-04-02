@@ -1846,7 +1846,7 @@ def make_3D_videos(hp, gp='last', multi_res=False, epoch=-1):
     # Set default group
     if gp == 'last':
         with h5py.File(hp, 'r') as f:
-            gp = list(f.keys())[-2]
+            gp = list(f.keys())[-1]
         print(f'Last group chosen: {gp}')
 
     with h5py.File(hp, 'r') as f:
